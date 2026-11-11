@@ -5,5 +5,5 @@ gem "propshaft", "~> 1.3"
 gem "puma", "~> 7.0"
 group :test do
   gem "minitest", "~> 5.25"
-  gem "selenium-webdriver", "4.35.0"
+  gem "selenium-webdriver", "4.52.0"
 end
