@@ -4,6 +4,8 @@ The initial inspection found an empty directory, Ruby 3.3.0, Rails 8.0.4 and Nod
 
 Rails renders one GET page. There are no food, workout or settings endpoints. JS calls IndexedDB directly. A static build boots Rails locally, renders that same view/layout and copies its assets. The deployable folder needs only HTTPS file hosting. Rails cannot execute on static hosting; no Rails-dependent interaction is included in production.
 
+`bin/rails static:build` invokes an exporter process that explicitly sets production mode, writes a staged build, validates every offline shell asset, and replaces `dist/`. The old output is retained until staging succeeds, and obsolete output files are removed on success. Cloudflare Pages consumes `dist/_headers` to revalidate fixed asset URLs at the domain root; the versioned service worker controls offline caching. `script/serve_static.rb` defaults to serving `dist/` at `/` without loading Rails, with `STATIC_MOUNT=/calorie` available for nested URL testing.
+
 ## IndexedDB `calorie-local`, version 2
 
 - `foods`, key path `id`, index `local_date`: `id`, `name`, `portion`, `meal_type`, `calories`, `protein_grams`, `local_date`, `local_time`, `created_at`, `updated_at`.

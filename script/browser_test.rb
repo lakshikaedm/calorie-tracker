@@ -1,4 +1,4 @@
-# Real Chromium checks against Rails and the static build at a nested URL.
+# Real Chromium checks against Rails, then static-only nested and root URLs.
 require "selenium-webdriver"
 require "fileutils"
 require "net/http"
@@ -11,14 +11,16 @@ ENV["SE_AVOID_STATS"] = "true"
 Selenium::WebDriver.logger.level = :error
 rails_port = ENV.fetch("TEST_RAILS_PORT", "3010")
 static_port = ENV.fetch("TEST_STATIC_PORT", "3011")
+root_port = ENV.fetch("TEST_ROOT_PORT", "3012")
 pids=[]
 driver=nil
 count=0
 $stdout.sync=true
 begin
   pids << Process.spawn("bundle", "exec", "rails", "server", "-b", "127.0.0.1", "-p", rails_port, "-P", "tmp/pids/browser-test.pid", chdir:ROOT, out:"#{ROOT}/tmp/browser-tests/rails.log", err:[:child,:out])
-  pids << Process.spawn({"PORT"=>static_port},"bundle", "exec", "ruby", "script/serve_static.rb", chdir:ROOT, out:"#{ROOT}/tmp/browser-tests/static.log", err:[:child,:out])
-  urls=["http://127.0.0.1:#{rails_port}/", "http://127.0.0.1:#{static_port}/calorie/"]
+  pids << Process.spawn({"PORT"=>static_port,"STATIC_MOUNT"=>"/calorie"},"bundle", "exec", "ruby", "script/serve_static.rb", chdir:ROOT, out:"#{ROOT}/tmp/browser-tests/static.log", err:[:child,:out])
+  pids << Process.spawn({"PORT"=>root_port,"STATIC_MOUNT"=>""},"bundle", "exec", "ruby", "script/serve_static.rb", chdir:ROOT, out:"#{ROOT}/tmp/browser-tests/static-root.log", err:[:child,:out])
+  urls=["http://127.0.0.1:#{rails_port}/", "http://127.0.0.1:#{static_port}/calorie/", "http://127.0.0.1:#{root_port}/"]
   urls.each do |url|
     deadline=Time.now+30
     loop do
@@ -55,9 +57,17 @@ begin
     js.call("const e=document.querySelector(arguments[0]).elements[arguments[1]];e.value=arguments[2];e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));",form,name,value)
   end
   click=lambda do |selector|
-    element=driver.find_element(css:selector)
-    driver.execute_script("arguments[0].scrollIntoView({block: \"center\"})",element)
-    element.click
+    # Live IndexedDB refreshes may replace an entry between lookup and click.
+    wait.until do
+      begin
+        element=driver.find_element(css:selector)
+        driver.execute_script("arguments[0].scrollIntoView({block: \"center\"})",element)
+        element.click
+        true
+      rescue Selenium::WebDriver::Error::StaleElementReferenceError
+        false
+      end
+    end
     if selector == '#open-settings'
       wait.until{driver.find_element(id:'settings-dialog').attribute('open')}
     elsif selector.include?('data-edit-kind')
@@ -66,11 +76,29 @@ begin
   end
   text=lambda{|selector|js.call("return document.querySelector(arguments[0])?.innerText || ''",selector)}
   urls.each_with_index do |url,index|
-    label=index.zero? ? "Rails" : "Static nested path"
+    label=["Rails","Static nested path","Static domain root"][index]
+    if index==1
+      # Static checks must pass with the test Rails backend actually stopped.
+      rails_pid=pids.shift
+      Process.kill('TERM',rails_pid)
+      Process.wait(rails_pid)
+    end
+    unless index.zero?
+      rails_unavailable=false
+      begin
+        Net::HTTP.get_response(URI(urls.first))
+      rescue Errno::ECONNREFUSED, EOFError
+        rails_unavailable=true
+      end
+      assert.call(rails_unavailable,"#{label}: Rails server is stopped")
+    end
     driver.navigate.to(url)
     wait.until{!driver.find_element(id:"today-screen").attribute("hidden")}
     wait.until{js.call("return !!navigator.serviceWorker.controller")}
     assert.call(driver.title.start_with?("Calorie"),"#{label}: launch")
+    expected_scope=URI(url)
+    actual_scope=async.call('return (await navigator.serviceWorker.getRegistration()).scope;')
+    assert.call(actual_scope==expected_scope.to_s,"#{label}: service worker scope matches deployment")
     results=async.call(File.read("#{ROOT}/test/javascript/repository.browser.js"))
     results.each{|r|assert.call(r["pass"],"#{label}: #{r['label']} #{r['error']}")}
     field.call('name','Chicken curry');field.call('portion','200g')
@@ -145,7 +173,7 @@ begin
     click.call('#settings-dialog [data-close]')
     driver.execute_cdp('Network.emulateNetworkConditions',offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1)
     driver.execute_cdp('Emulation.clearDeviceMetricsOverride')
-    if index==1
+    if index>0
       click.call('[data-kind=food]');field.call('name','Draft across update');field.call('portion','2 slices')
       worker_path="#{ROOT}/dist/service-worker.js"
       original_worker=File.read(worker_path)

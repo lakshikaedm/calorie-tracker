@@ -22,31 +22,39 @@ bin/rails static:build
 bundle exec ruby script/browser_test.rb
 ```
 
-The browser suite requires Chrome. Selenium downloads its matching driver into `tmp/selenium` on first use. It starts temporary Rails/static servers on ports 3010/3011, uses a fresh browser profile, and closes its servers afterwards. Set `TEST_RAILS_PORT` / `TEST_STATIC_PORT` to avoid conflicts. Screenshots are saved in `test/artifacts/`. No npm installation is needed: the JavaScript tests use Node's built-in runner.
+The browser suite requires Chrome. Selenium downloads its matching driver into `tmp/selenium` on first use. It starts temporary Rails/static servers on ports 3010/3011/3012, uses a fresh browser profile, and closes its servers afterwards. It stops Rails before checking the static build at `/calorie/` and `/`, including offline reloads and updates. Set `TEST_RAILS_PORT`, `TEST_STATIC_PORT` or `TEST_ROOT_PORT` to avoid conflicts. Screenshots are saved in `test/artifacts/`. No npm installation is needed: the JavaScript tests use Node's built-in runner.
 
 See [verification](docs/VERIFICATION.md) for executed checks and iPhone manual checks.
 
 ## Static build and free hosting
 
+From the project root, run this exact build command:
+
 ```sh
 bin/rails static:build
 ```
 
-Upload the **contents of `dist/`** to an HTTPS static host. This is the same Rails-rendered UI and the exact same JS/CSS, not a separate frontend. No Ruby process runs on the static host. `dist/` contains no personal data, Rails credentials, or server source. Build locally; upload prebuilt assets.
+The deployable folder is **`/Users/lakshikaedm/Projects/calory-tracker/dist/`** in this checkout (always `dist/` relative to the project root). Its root contains `index.html`, `manifest.webmanifest`, `service-worker.js`, Cloudflare's `_headers` file and the `app/` folder with CSS, JavaScript and local icons.
+
+The exporter always boots Rails in **production** mode in a separate process, even if the calling shell sets `RAILS_ENV=development` or `test`. A dummy build-only secret avoids needing production credentials. It renders into a temporary directory, checks every precached asset exists, then replaces only the generated `dist/` output. A failed render/asset check leaves the previous successful build intact. Repeated builds remove stale output assets and produce identical file contents for unchanged source. Source files and IndexedDB data are never removed by the build.
+
+Upload the **contents of `dist/`** to an HTTPS static host. This is the same Rails-rendered UI and the exact same JS/CSS, not a separate frontend. No Ruby process, Rails server, backend API or database is needed on the static host. `dist/` contains no personal data, Rails credentials, or server source. Build locally; upload prebuilt assets.
 
 Recommended: Cloudflare Pages Direct Upload on its Free plan. In the dashboard, open Workers & Pages, create a Pages project, choose the direct upload/drag-and-drop option, and upload `dist/`. Retain the same production `https://<project>.pages.dev/` URL for every update. No Workers, Functions, billing-backed services or API keys are used by this app. Current provider interface details: [Direct Upload documentation](https://developers.cloudflare.com/pages/get-started/direct-upload/) and [Free plan limits](https://developers.cloudflare.com/pages/platform/limits/).
+
+For Cloudflare Pages, serve this output at the **domain root**, such as `https://<project>.pages.dev/`. Use the prebuilt `dist/` folder as the upload/output directory; do not upload the Rails project. Direct Upload runs no remote build command and does not set up automatic Git deployments. No Wrangler configuration or Cloudflare account connection is required to generate or test the output locally. The included `_headers` applies `Cache-Control: no-cache` at `/` and all fixed asset URLs so HTTP caches revalidate while the versioned service worker provides offline caching. See [Cloudflare's `_headers` documentation](https://developers.cloudflare.com/pages/configuration/headers/).
 
 GitHub Pages also works, including `https://<user>.github.io/<repository>/`. Use a public repository for the free GitHub Pages path. You may publish only the generated files to a Pages branch, or use the manually triggered example in [docs/pages-workflow.yml](docs/pages-workflow.yml). Copy that example to `.github/workflows/pages.yml` only when you want deployment enabled, choose GitHub Actions in repository Settings → Pages, and run it manually. See [GitHub's workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
 The app uses hash navigation (`#today`, `#history`), relative module/manifest/icon paths, and a service worker scoped to its containing directory. A project Pages URL must end in `/`; static hosts normally redirect to it. No catch-all server rewrite is required. A cold request to an invented deep path isn't supported; use the app's root URL and hash navigation.
 
-Preview the nested static deployment locally:
+Preview the Cloudflare-style domain-root deployment locally, with **no Rails server running**:
 
 ```sh
 bundle exec ruby script/serve_static.rb
 ```
 
-Open <http://127.0.0.1:3001/calorie/>. Service workers work on loopback HTTP or real HTTPS, not arbitrary insecure HTTP/LAN URLs. A `file://` preview will not work.
+Open <http://127.0.0.1:3001/>. This is a file-only preview server and never boots Rails. To check a nested deployment instead, run `STATIC_MOUNT=/calorie bundle exec ruby script/serve_static.rb` and open <http://127.0.0.1:3001/calorie/>. Service workers work on loopback HTTP or real HTTPS, not arbitrary insecure HTTP/LAN URLs. A `file://` preview will not work.
 
 **Nothing in this repository deploys automatically.** The included CI runs tests and exports the build only.
 
