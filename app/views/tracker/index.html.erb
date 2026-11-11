@@ -1,0 +1,57 @@
+<svg class="symbol-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M19 4C9 3 3 8 5 14s12 7 14-10Z"/><path d="m5 20 9-10"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="m9 3-.7 2.3-2 .9L4 5.8 2 9.2l1.8 1.7v2.2L2 14.8l2 3.4 2.3-.4 2 .9L9 21h4l.7-2.3 2-.9 2.3.4 2-3.4-1.8-1.7v-2.2L20 9.2l-2-3.4-2.3.4-2-.9L13 3Z"/><circle cx="11" cy="12" r="3"/></symbol>
+  <symbol id="i-today" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 11h16m-12 5h3"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-4v5l3 2"/></symbol>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M5 3v7m3-7v7M3 3v5c0 4 7 4 7 0V3M6 12v9m13 0V3c-4 0-5 8-1 9h1"/></symbol>
+  <symbol id="i-workout" viewBox="0 0 24 24"><path d="m6 6 12 12M3 8l5-5M2 5l3-3m11 19 5-5m-2 6 3-3M5 10l5-5m4 14 5-5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+</svg>
+<div class="app-shell">
+  <header class="app-header">
+    <a class="brand" href="#today" aria-label="Calorie home"><span class="brand-mark"><svg><use href="#i-leaf"/></svg></span>Calorie<span class="brand-dot">.</span></a>
+    <div class="header-right"><span id="connection" class="connection">On this device</span><button id="open-settings" class="icon-button" aria-label="Settings"><svg><use href="#i-gear"/></svg></button></div>
+  </header>
+  <main id="main">
+    <div id="loading" class="empty">Opening your daily space…</div>
+    <section id="today-screen" hidden aria-labelledby="today-title">
+      <div class="page-heading"><div><p id="today-date" class="eyebrow"></p><h1 id="today-title">A little balance,<br><span>every day.</span></h1></div><span class="day-badge">Today</span></div>
+      <div class="today-grid">
+        <section class="summary card" aria-label="Daily summary">
+          <div class="section-top"><p class="eyebrow">YOUR DAILY BALANCE</p><span id="target-label" class="muted"></span></div>
+          <div class="remaining"><span id="remaining-value">1,800</span><div>kcal<br><span>remaining</span></div></div>
+          <div class="summary-stats"><div><span class="stat-label">Food consumed</span><strong id="food-total">0 <small>kcal</small></strong></div><div><span class="stat-label">Workout burned</span><strong id="workout-total">0 <small>kcal</small></strong></div></div>
+          <div class="protein-line"><span>Protein consumed</span><strong id="protein-total">0 g</strong></div>
+          <p id="protein-remaining" class="muted protein-remaining" hidden></p>
+          <div id="calorie-progress" class="progress" role="progressbar" aria-label="Food consumed relative to daily target" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-fill"></span></div>
+          <div class="progress-labels"><span>Food intake</span><span id="progress-label">0% of daily target</span></div>
+          <div class="summary-footer"><svg><use href="#i-leaf"/></svg><span>One entry at a time.</span></div>
+        </section>
+        <section class="logger card" aria-label="Add an entry">
+          <div class="section-top"><h2>A moment to log</h2><span class="muted">Keep it simple.</span></div>
+          <div class="segments" role="group" aria-label="Entry type"><button type="button" data-kind="food" aria-pressed="true"><svg><use href="#i-food"/></svg>Food</button><button type="button" data-kind="workout" aria-pressed="false"><svg><use href="#i-workout"/></svg>Workout</button></div>
+          <form id="entry-form">
+            <label><span id="name-label">Food name</span><input name="name" required maxlength="200" placeholder="e.g. Chicken rice" autocomplete="off"></label>
+            <div id="food-fields" class="field-row"><label>Portion<input name="portion" maxlength="200" required placeholder="e.g. 150g, 1 bowl"></label><label>Meal type<select name="meal_type"><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option><option>Other</option></select></label></div>
+            <div class="field-row"><label><span id="calories-label">Calories</span><span class="calorie-input"><span class="unit-input"><input name="calories" type="number" inputmode="decimal" min="0" max="1000000" step="any" required placeholder="0"><span>kcal</span></span><button type="button" id="copy-estimate" class="copy-button" aria-label="Copy calorie and protein question" title="Copy question for ChatGPT"><svg><use href="#i-copy"/></svg></button></span></label><label id="protein-field">Protein <span class="optional">optional</span><span class="unit-input"><input name="protein_grams" type="number" inputmode="decimal" min="0" max="1000000" step="any" placeholder="0"><span>g</span></span></label></div>
+            <div class="time-row"><label>Time<input name="local_time" type="time" required></label><a id="chatgpt-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Open ChatGPT <span aria-hidden="true">↗</span></a></div>
+            <button class="primary" id="submit-entry" type="submit">+ Add Food</button>
+            <p id="form-error" class="error" role="alert" hidden></p>
+          </form>
+        </section>
+        <section class="entries-section" aria-labelledby="entries-title"><div class="section-top"><h2 id="entries-title">Today's Entries</h2><span id="entry-count" class="muted">0 entries</span></div><div id="today-entries" class="entry-list"></div></section>
+      </div>
+    </section>
+    <section id="history-screen" hidden aria-labelledby="history-title"><div class="page-heading"><div><p class="eyebrow">YOUR PAST DAYS</p><h1 id="history-title">A little perspective.</h1><p class="muted">Your food and movement, day by day.</p></div></div><div id="history-list"></div><button id="more-history" class="secondary" hidden>Show earlier days</button></section>
+  </main>
+  <footer class="app-footer">A little space for you. Stored only on this device.</footer>
+</div>
+<nav class="bottom-nav" aria-label="Main navigation"><a href="#today" id="nav-today" aria-current="page"><svg><use href="#i-today"/></svg>Today</a><a href="#history" id="nav-history"><svg><use href="#i-history"/></svg>History</a></nav>
+<dialog id="settings-dialog" aria-labelledby="settings-title"><div class="dialog-heading"><h2 id="settings-title">Your preferences</h2><button type="button" class="icon-button" data-close aria-label="Close settings">×</button></div>
+<form id="settings-form"><label>Daily calorie target<span class="unit-input"><input name="daily_calorie_goal" type="number" min="1" max="1000000" step="any" required inputmode="decimal"><span>kcal</span></span></label><p class="hint">Changes apply to today and future days. Past daily targets stay as recorded.</p><label class="checkbox-label"><input name="protein_enabled" type="checkbox">Set a daily protein target</label><label id="protein-goal-field" hidden>Daily protein target<span class="unit-input"><input name="optional_daily_protein_goal" type="number" min="0.1" max="1000000" step="any" inputmode="decimal"><span>g</span></span></label><label>Appearance<select name="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><button class="primary">Save preferences</button><p id="settings-error" class="error" role="alert" hidden></p></form>
+<div class="data-management"><h3>Your data</h3><button id="export-data" class="setting-action">Export JSON backup <span>↓</span></button><label class="setting-action import-label">Import JSON backup <span>↑</span><input id="import-data" type="file" accept="application/json,.json"></label><p class="hint">Import merges missing records by ID. Existing records, preferences and daily targets are kept. Restore into an empty app to recover everything.</p><button id="clear-data" class="setting-action danger">Clear all data <span>×</span></button></div><p class="hint">Your data stays in this browser. Clearing browser or app storage can remove it. Export a backup regularly.</p><p class="hint">Exercise calorie estimates are approximate and do not necessarily represent additional calories that should all be eaten.</p><p id="offline-status" class="hint">Preparing offline access…</p><button id="apply-update" class="secondary" hidden>Update app</button></dialog>
+<dialog id="edit-dialog" aria-labelledby="edit-title"><div class="dialog-heading"><h2 id="edit-title">Edit entry</h2><button type="button" class="icon-button" data-close aria-label="Close editor">×</button></div><form id="edit-form"></form><button id="delete-entry" class="setting-action danger">Delete entry</button></dialog>
+<dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Clear all your data?</h2><p>This removes entries, drafts, settings and daily targets from this device. Export a backup first if you want to keep them.</p><div class="confirm-actions"><button id="cancel-clear" class="secondary">Keep data</button><button id="confirm-clear" class="primary destructive">Clear everything</button></div></dialog>
+<div id="toast" class="toast" role="status" hidden><span id="toast-text"></span><button id="undo-delete" hidden>Undo</button></div>
+<noscript><p class="empty">Calorie needs JavaScript to keep your entries safely on this device.</p></noscript>

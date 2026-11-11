@@ -1,0 +1,11 @@
+/.bundle
+/log/*
+!/log/.keep
+/tmp/*
+!/tmp/.keep
+!/tmp/pids
+!/tmp/pids/.keep
+/config/master.key
+/dist
+/test/artifacts
+.DS_Store
