@@ -40,6 +40,21 @@ begin
   options.add_preference("download.default_directory", "#{ROOT}/test/artifacts")
   driver=Selenium::WebDriver.for(:chrome,options:options)
   driver.manage.timeouts.script_timeout=30
+  # Every document uses a local mocked API; no request reaches Cloudflare.
+  driver.execute_cdp('Page.addScriptToEvaluateOnNewDocument', source: <<~JS)
+    window.widgetRequests=[];
+    window.widgetReply=200;
+    const originalFetch=window.fetch.bind(window);
+    window.fetch=async (url, options)=>{
+      if(String(url)==='https://widget.example.test/api/summary') {
+        window.widgetRequests.push({url, method:options.method, body:JSON.parse(options.body),
+          authorized:options.headers.Authorization==='Bearer browser-test-only'});
+        if(window.widgetReply==='network') throw new TypeError('Mock network failure');
+        return new Response('',{status:window.widgetReply});
+      }
+      return originalFetch(url,options);
+    };
+  JS
   wait=Selenium::WebDriver::Wait.new(timeout:15)
   assert=lambda do |condition,label|
     raise "FAIL: #{label}" unless condition
@@ -101,6 +116,28 @@ begin
     assert.call(actual_scope==expected_scope.to_s,"#{label}: service worker scope matches deployment")
     results=async.call(File.read("#{ROOT}/test/javascript/repository.browser.js"))
     results.each{|r|assert.call(r["pass"],"#{label}: #{r['label']} #{r['error']}")}
+    click.call('#open-settings')
+    assert.call(text.call('#widget-status')=='Disabled',"#{label}: Widget Sync defaults to disabled")
+    field.call('endpoint','https://widget.example.test','#widget-form')
+    field.call('token','browser-test-only','#widget-form')
+    js.call("document.querySelector('#widget-form').elements.enabled.checked=true")
+    click.call('#widget-form button')
+    wait.until{text.call('#widget-status')=='Synced'}
+    assert.call(js.call("return document.querySelector('#widget-form').elements.token.value")== '',"#{label}: saved token input is empty")
+    assert.call(js.call("return window.widgetRequests.at(-1).body.consumed")==0,"#{label}: enable sync sends empty today")
+    assert.call(js.call("return window.widgetRequests.at(-1).authorized"),"#{label}: POST uses authorization header")
+    js.call('window.widgetReply=401')
+    click.call('#widget-test')
+    wait.until{text.call('#widget-status')=='Error'}
+    assert.call(text.call('#widget-message').include?('Authorization failed'),"#{label}: invalid authentication shows actionable error")
+    js.call("window.widgetReply='network'")
+    click.call('#widget-test')
+    wait.until{text.call('#widget-status')=='Error' && text.call('#widget-message').include?('CORS')}
+    assert.call(true,"#{label}: network/CORS failure keeps local app usable")
+    js.call('window.widgetReply=200')
+    click.call('#widget-test')
+    wait.until{text.call('#widget-status')=='Synced'}
+    click.call('#settings-dialog [data-close]')
     field.call('name','Chicken curry');field.call('portion','200g')
     # Exercise the real copy button with a controlled Clipboard API, then native
     # clipboard where headless Chrome grants access.
@@ -119,10 +156,14 @@ begin
     assert.call(native_copy.include?('Chicken curry, portion: 200g.'),"#{label}: native Chromium Clipboard API")
     field.call('calories','1000');field.call('protein_grams','25');field.call('local_time','12:40')
     click.call('#submit-entry');wait.until{text.call('#remaining-value')=='800'}
+    wait.until{js.call("return window.widgetRequests.at(-1)?.body.consumed")==1000}
+    assert.call(js.call("return window.widgetRequests.at(-1).body.protein")==25,"#{label}: food commit synchronizes protein")
     click.call('[data-kind=workout]');field.call('name','Strength training');field.call('calories','300');field.call('local_time','11:30');click.call('#submit-entry')
     wait.until{text.call('#remaining-value')=='1,100'}
     assert.call(text.call('#protein-total')=='25 g',"#{label}: workout does not change protein")
+    wait.until{js.call("return window.widgetRequests.at(-1)?.body.workout")==300}
     click.call('[data-edit-kind=food]');field.call('calories','2000','#edit-form');field.call('protein_grams','35.5','#edit-form');click.call('#edit-form .primary');wait.until{text.call('#remaining-value')=='100'}
+    wait.until{js.call("return window.widgetRequests.at(-1)?.body.protein")==35.5}
     click.call('[data-edit-kind=workout]');field.call('calories_burned','100','#edit-form');click.call('#edit-form .primary');wait.until{text.call('#remaining-value')=='-100'}
     assert.call(text.call('#protein-total')=='35.5 g',"#{label}: edit food and workout recalculates")
     click.call('[data-edit-kind=workout]');click.call('#delete-entry');wait.until{text.call('#remaining-value')=='-200'};click.call('#undo-delete');wait.until{text.call('#remaining-value')=='-100'}
@@ -133,6 +174,8 @@ begin
     click.call('#open-settings');field.call('daily_calorie_goal','2100','#settings-form');field.call('theme','dark','#settings-form');click.call('#settings-form .primary')
     wait.until{js.call("return document.documentElement.dataset.theme")=='dark'}
     wait.until{text.call('.history-totals').include?('1,800')}
+    wait.until{js.call("return window.widgetRequests.at(-1)?.body.target")==2100}
+    assert.call(js.call("return window.widgetRequests.at(-1).body.consumed")==0,"#{label}: historical edit sends today, never historical totals")
     assert.call(true,"#{label}: dark appearance and historical goal preserved")
     click.call('#nav-today');wait.until{text.call('#remaining-value')=='2,200'}
     js.call('window.scrollTo(0,0)')
@@ -166,12 +209,20 @@ begin
     backup_path="#{ROOT}/test/artifacts/calorie-backup-#{Time.now.strftime('%Y-%m-%d')}.json"
     wait.until{File.exist?(backup_path)}
     exported=JSON.parse(File.read(backup_path))
+    assert.call(!exported.to_json.include?('browser-test-only'),"#{label}: exported backup excludes private token")
+    assert.call(js.call("return window.widgetRequests.length")==0,"#{label}: offline log mutations never wait for API")
     assert.call(exported['app']=='Calorie' && exported['foods'].any?{|food|food['name']=='Offline banana'},"#{label}: offline JSON download")
     File.delete(backup_path)
     click.call('#clear-data');wait.until{driver.find_element(id:'confirm-dialog').attribute('open')};click.call('#cancel-clear')
     assert.call(js.call("return document.querySelector('#settings-dialog').open"),"#{label}: clear requires explicit confirmation and can be cancelled")
     click.call('#settings-dialog [data-close]')
     driver.execute_cdp('Network.emulateNetworkConditions',offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1)
+    wait.until{js.call("return window.widgetRequests.at(-1)?.body.target")==2200}
+    assert.call(js.call("return window.widgetRequests.at(-1).body.remaining")==2250,"#{label}: connectivity restores latest pending summary")
+    js.call("document.dispatchEvent(new Event('visibilitychange'))")
+    previous_requests=js.call('return window.widgetRequests.length')
+    wait.until{js.call('return window.widgetRequests.length')>previous_requests}
+    assert.call(true,"#{label}: returning to active app synchronizes today")
     driver.execute_cdp('Emulation.clearDeviceMetricsOverride')
     if index>0
       click.call('[data-kind=food]');field.call('name','Draft across update');field.call('portion','2 slices')
@@ -193,6 +244,11 @@ begin
     end
   end
   puts "#{count} browser checks passed. Screenshots in test/artifacts/."
+rescue => error
+  if driver
+    warn "Widget diagnostic: #{driver.execute_script("return {status:document.querySelector('#widget-status')?.textContent,message:document.querySelector('#widget-message')?.textContent,requests:window.widgetRequests?.length,locks:!!navigator.locks}")}"
+  end
+  raise error
 ensure
   driver&.quit
   pids.each{|pid|Process.kill('TERM',pid) rescue nil}

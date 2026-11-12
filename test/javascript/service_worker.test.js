@@ -101,6 +101,7 @@ test("service worker installs every local shell asset including modules and icon
     "index.html",
     "app/database.js",
     "app/domain.js",
+    "app/widget_sync.js",
     "app/clipboard.js",
     "app/styles.css",
     "app/icon-512.png",
@@ -143,6 +144,17 @@ test("only explicit shell resources are cached; external/private requests pass t
   const count = h.fetched.length;
   await h.trigger("fetch", { request: new Request(scope + "app/domain.js") });
   assert.equal(h.fetched.length, count);
+});
+test("API and authenticated requests bypass both cache and navigation fallback", async () => {
+  const h = harness();
+  await h.trigger("install");
+  const before = h.fetched.length;
+  for (const req of [
+    new Request("https://widget.example/api/summary", { method: "POST", headers: { Authorization: "Bearer test" } }),
+    new Request(scope + "app/domain.js", { headers: { Authorization: "Bearer test" } }),
+    { method: "GET", url: new URL("/api/summary", scope).href, mode: "navigate" },
+  ]) assert.equal(await h.trigger("fetch", { request: req }), undefined);
+  assert.equal(h.fetched.length, before);
 });
 test("activation removes only obsolete caches in its own deployment scope", async () => {
   const h = harness();

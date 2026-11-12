@@ -215,5 +215,52 @@ await check(
     indexedDB.deleteDatabase(legacy);
   },
 );
+await check("Widget Sync preserves v2 records, isolates credentials and marks every committed mutation", async () => {
+  const widgetName = name + "-widget";
+  let device = await openDatabase(widgetName);
+  await device.import(backup);
+  const before = await device.export();
+  const stores = [...device.db.objectStoreNames];
+  equal((await device.widgetSync()).enabled, false);
+  await device.widgetSync(state => ({ ...state, enabled: true, token: "PRIVATE_TEST_SENTINEL",
+    endpoint: "https://widget.example/api/summary" }));
+  const after = await device.export();
+  equal({ ...after, exported_at: null }, { ...before, exported_at: null });
+  equal(JSON.stringify(await device.export()).includes("PRIVATE_TEST_SENTINEL"), false);
+  device.db.close();
+  device = await openDatabase(widgetName);
+  equal(device.db.version, 2);
+  equal([...device.db.objectStoreNames], stores);
+  equal((await device.export()).foods, before.foods);
+  equal((await device.export()).workouts, before.workouts);
+  equal((await device.widgetSync()).token, "PRIVATE_TEST_SENTINEL");
+  async function mutation(run) {
+    await device.widgetSync(state => ({ ...state, pending: false }));
+    const revision = (await device.widgetSync()).revision;
+    await run();
+    equal((await device.widgetSync()).pending, true);
+    equal((await device.widgetSync()).revision === revision, false);
+  }
+  let entry;
+  await mutation(async () => { entry = await device.save("food", f); });
+  await mutation(async () => { entry = await device.save("food", { ...entry, calories: 500 }, entry); });
+  await mutation(() => device.remove("food", entry));
+  await mutation(() => device.undo(entry.id));
+  await mutation(async () => { entry = await device.save("workout", w); });
+  await mutation(async () => { entry = await device.save("workout", { ...entry, calories_burned: 200 }, entry); });
+  await mutation(() => device.remove("workout", entry));
+  await mutation(() => device.undo(entry.id));
+  await mutation(() => device.saveSettings({ ...DEFAULT_SETTINGS, daily_calorie_goal: 2300 }));
+  await mutation(() => device.save("food", { ...f, local_date: yesterday }));
+  await mutation(() => device.import(backup));
+  equal((await device.widgetSync()).token, "PRIVATE_TEST_SENTINEL");
+  equal(JSON.stringify(await device.export()).includes("PRIVATE_TEST_SENTINEL"), false);
+  // Rejected local mutations cannot create pending cloud changes.
+  await device.widgetSync(state => ({ ...state, pending: false }));
+  try { await device.save("food", { ...f, calories: -1 }); } catch {}
+  equal((await device.widgetSync()).pending, false);
+  device.db.close();
+  indexedDB.deleteDatabase(widgetName);
+});
 indexedDB.deleteDatabase(name);
 return results;

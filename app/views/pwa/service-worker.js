@@ -1,6 +1,6 @@
 // Static export replaces the version and shell list with content hashes.
 const VERSION = 'calorie-v1';
-const FILES = ['./','./index.html','./manifest.webmanifest','./app/styles.css','./app/application.js','./app/domain.js','./app/database.js','./app/clipboard.js','./app/pwa.js','./app/icon.svg','./app/icon-192.png','./app/icon-512.png','./app/apple-touch-icon.png'];
+const FILES = ['./','./index.html','./manifest.webmanifest','./app/styles.css','./app/application.js','./app/domain.js','./app/database.js','./app/clipboard.js','./app/pwa.js','./app/widget_sync.js','./app/icon.svg','./app/icon-192.png','./app/icon-512.png','./app/apple-touch-icon.png'];
 const CACHE = `${VERSION}-${self.registration.scope}`;
 const scopeURL=new URL(self.registration.scope);
 const scopedFiles=new Set(FILES.map(path=>new URL(path,scopeURL).href));
@@ -18,6 +18,7 @@ self.addEventListener('activate',event=>{
 self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')self.skipWaiting();});
 self.addEventListener('fetch',event=>{
   const req=event.request;const url=new URL(req.url);
+  if(req.headers?.has('Authorization')||url.pathname==='/api/summary')return;
   if(req.method!=='GET'||url.origin!==scopeURL.origin||!url.pathname.startsWith(scopeURL.pathname))return;
   if(req.mode==='navigate') {
     event.respondWith(caches.open(CACHE).then(async cache=>await cache.match(scopeURL)||fetch(req)));return;

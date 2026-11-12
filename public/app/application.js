@@ -11,6 +11,7 @@ import {
 import { openDatabase } from "./database.js";
 import { copyText } from "./clipboard.js";
 import { registerPWA } from "./pwa.js";
+import { WidgetSync, widgetConfiguration } from "./widget_sync.js";
 const $ = (selector) => document.querySelector(selector);
 const form = $("#entry-form");
 const escapeHTML = (value) =>
@@ -22,6 +23,7 @@ const escapeHTML = (value) =>
       ],
   );
 let repo,
+  widgetSync,
   settings,
   kind = "food",
   today = localDate(),
@@ -229,6 +231,7 @@ async function refresh() {
   $("#today-entries").innerHTML = count
     ? entriesMarkup(day)
     : '<div class="empty"><svg aria-hidden="true"><use href="#i-food"/></svg><strong>A fresh start for today.</strong>Add your first food or workout above.</div>';
+  widgetSync?.schedule();
   if (location.hash === "#history") await renderHistory(version);
 }
 function route() {
@@ -299,6 +302,13 @@ async function openEditor(id, type) {
 async function boot() {
   try {
     repo = await openDatabase();
+    widgetSync = new WidgetSync(repo, { onStatus: state => {
+      $("#widget-status").textContent = state.status;
+      $("#widget-last-success").textContent = state.last_success
+        ? new Date(state.last_success).toLocaleString() : "Never";
+      $("#widget-message").textContent = state.error || "";
+    } });
+    void widgetSync.opportunity();
     settings = await repo.settings();
     theme();
     drafts.food = await repo.draft("food");
@@ -398,6 +408,13 @@ async function boot() {
         settings.optional_daily_protein_goal != null;
       f.elements.optional_daily_protein_goal.value =
         settings.optional_daily_protein_goal ?? "";
+      const sync = await repo.widgetSync();
+      $("#widget-form").elements.enabled.checked = sync.enabled;
+      $("#widget-form").elements.endpoint.value = sync.endpoint;
+      $("#widget-form").elements.token.value = "";
+      $("#widget-form").elements.token.placeholder = sync.token
+        ? "Saved on this device — enter a replacement" : "Enter private write token";
+      await widgetSync.status();
       toggleProtein();
       $("#settings-error").hidden = true;
       $("#settings-dialog").showModal();
@@ -428,6 +445,37 @@ async function boot() {
       } catch (e) {
         showError($("#settings-error"), e);
       }
+    });
+    $("#widget-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      try {
+        const f = event.target;
+        const saved = await repo.widgetSync(state => widgetConfiguration(state, {
+          enabled: f.elements.enabled.checked,
+          endpoint: f.elements.endpoint.value, token: f.elements.token.value,
+        }));
+        f.elements.token.value = "";
+        f.elements.token.placeholder = saved.token
+          ? "Saved on this device — enter a replacement" : "Enter private write token";
+        changed();
+        widgetSync.schedule();
+        await widgetSync.status();
+      } catch (e) { $("#widget-message").textContent = errorMessage(e); }
+    });
+    $("#widget-remove-token").addEventListener("click", async () => {
+      try {
+        await repo.widgetSync(state => ({ ...state, token: "", enabled: false,
+          pending: false, status: "Disabled", error: "", revision: crypto.randomUUID() }));
+        $("#widget-form").elements.token.value = "";
+        $("#widget-form").elements.token.placeholder = "Enter private write token";
+        $("#widget-form").elements.enabled.checked = false;
+        changed();
+        await widgetSync.status();
+      } catch { $("#widget-message").textContent = "Unable to remove the token from local storage. Try again."; }
+    });
+    $("#widget-test").addEventListener("click", () => { void widgetSync.opportunity(); });
+    $("#settings-dialog").addEventListener("close", () => {
+      $("#widget-form").elements.token.value = "";
     });
     document
       .querySelectorAll("[data-close]")
@@ -506,6 +554,7 @@ async function boot() {
             form.elements.local_time.value = localTime();
         }
         refresh().catch((e) => notify(errorMessage(e)));
+        void widgetSync.opportunity();
       }
     };
     document.addEventListener("visibilitychange", checkDay);
@@ -523,8 +572,8 @@ async function boot() {
         : "Offline · on this device";
     };
     connection();
-    window.addEventListener("online", connection);
-    window.addEventListener("offline", connection);
+    window.addEventListener("online", () => { connection(); void widgetSync.opportunity(); });
+    window.addEventListener("offline", () => { connection(); void widgetSync.status().catch(() => {}); });
     registerPWA(async () => {
       queueDraft();
       await writeQueue;

@@ -21,6 +21,27 @@ const request = (req) =>
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+// Private, device-only configuration. Export reads only "preferences".
+const WIDGET_KEY = "widget_sync";
+export const WIDGET_DEFAULTS = {
+  enabled: false, endpoint: "", token: "", pending: false,
+  revision: "", last_success: null, last_attempt: 0, status: "Disabled",
+};
+async function widgetState(tx, update) {
+  const store = tx.objectStore("settings");
+  const state = { ...WIDGET_DEFAULTS, ...await request(store.get(WIDGET_KEY)) };
+  if (update) {
+    const next = update(state);
+    store.put(next, WIDGET_KEY);
+    return next;
+  }
+  return state;
+}
+async function markWidgetPending(tx) {
+  return widgetState(tx, state => state.enabled
+    ? { ...state, pending: true, revision: crypto.randomUUID(), status: "Pending", error: "" }
+    : state);
+}
 export function migrate(db, tx, oldVersion) {
   if (oldVersion < 1) {
     for (const name of ["foods", "workouts"]) {
@@ -99,6 +120,13 @@ export class Repository {
       throw error;
     }
   }
+  async widgetSync(update) {
+    return this.transaction(["settings"], update ? "readwrite" : "readonly",
+      tx => widgetState(tx, update));
+  }
+  async requestWidgetSync() {
+    return this.transaction(["settings"], "readwrite", markWidgetPending);
+  }
   async settings() {
     return this.transaction(
       ["settings"],
@@ -140,6 +168,7 @@ export class Repository {
           daily_calorie_goal: settings.daily_calorie_goal,
           optional_daily_protein_goal: settings.optional_daily_protein_goal,
         });
+      await markWidgetPending(tx);
       return settings;
     });
   }
@@ -198,6 +227,7 @@ export class Repository {
           }
         tx.objectStore(storeName).put(entry);
         if (!original) tx.objectStore("drafts").delete(kind);
+        await markWidgetPending(tx);
       },
     );
     return entry;
@@ -211,18 +241,19 @@ export class Repository {
       expires_at: Date.now() + 15000,
     };
     await this.transaction(
-      [store, "pending_deletions"],
+      [store, "pending_deletions", "settings"],
       "readwrite",
       async (tx) => {
         tx.objectStore(store).delete(entry.id);
         tx.objectStore("pending_deletions").put(pending);
+        await markWidgetPending(tx);
       },
     );
     return pending;
   }
   async undo(id) {
     return this.transaction(
-      ["foods", "workouts", "pending_deletions"],
+      ["foods", "workouts", "pending_deletions", "settings"],
       "readwrite",
       async (tx) => {
         const store = tx.objectStore("pending_deletions");
@@ -233,6 +264,7 @@ export class Repository {
           pending.entry,
         );
         store.delete(id);
+        await markWidgetPending(tx);
       },
     );
   }
@@ -329,6 +361,7 @@ export class Repository {
             local_date: localDate(),
             ...goalForDate(backup.settings, localDate()),
           });
+        await markWidgetPending(tx);
         return { added, skipped };
       },
     );

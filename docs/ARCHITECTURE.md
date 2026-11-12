@@ -11,6 +11,7 @@ Rails renders one GET page. There are no food, workout or settings endpoints. JS
 - `foods`, key path `id`, index `local_date`: `id`, `name`, `portion`, `meal_type`, `calories`, `protein_grams`, `local_date`, `local_time`, `created_at`, `updated_at`.
 - `workouts`, key path `id`, index `local_date`: `id`, `name`, `calories_burned`, `local_date`, `local_time`, `created_at`, `updated_at`.
 - `settings`, key `preferences`: calorie goal, nullable protein goal, theme, and an ordered `goal_versions` effective-date timeline.
+- `settings`, separate private key `widget_sync`: optional device-only API endpoint, write token, enabled flag, pending revision, status, last attempt and last success. Excluded from exports; imports cannot replace it. No schema/version change is needed.
 - `goals`, key path `local_date`: daily calorie/protein target snapshots.
 - `drafts`, keys `food` / `workout`: form values.
 - `pending_deletions`, key path `id`: deleted entry, type, and Undo expiry timestamp.
@@ -29,4 +30,12 @@ An import is validated in full, then merged in a single multi-store transaction.
 
 `CalorieAssets.service_worker` hashes the worker template, app modules, CSS, icons, manifest and ERB templates. Both Rails and the exporter use it. Each worker owns a versioned cache scoped to its deployment directory. Installation requires the whole shell; navigation serves its cached root. The scope and manifest paths are relative to the hosting subdirectory. All app navigation uses hashes.
 
-An updated worker waits until explicitly accepted in Settings or normal worker lifecycle activation after old clients close. Activation removes only obsolete Calorie caches for that scope; unrelated caches and IndexedDB remain intact. Personal records never travel in requests and never enter service-worker caches. Export files remain local browser downloads. No external assets are necessary for offline operation; the optional ChatGPT link naturally needs network access.
+An updated worker waits until explicitly accepted in Settings or normal worker lifecycle activation after old clients close. Activation removes only obsolete Calorie caches for that scope; unrelated caches and IndexedDB remain intact. Individual personal records never travel in requests and never enter service-worker caches. Optional Widget Sync sends only today’s aggregate summary to the user-configured HTTPS Worker, using a private header credential. Authenticated/API requests bypass the worker cache and offline navigation fallback. Export files remain local browser downloads. No external assets are necessary for offline operation; the optional ChatGPT link naturally needs network access.
+
+## Optional summary synchronization
+
+`widget_sync.js` reuses `repo.day`, `repo.goal`, `summarize` and `localDate`. Every data mutation marks an enabled sync pending with a fresh revision in the same successful IndexedDB transaction. This adds no schema migration, changes no existing entry, and never depends on network access. The UI refreshes from local records and schedules a separate debounced request. Imports and Undo also invalidate the summary.
+
+Requests share an origin-wide Web Lock. Each locked attempt rereads current configuration and today's local totals. A persisted completion timestamp enforces a 1.5-second cooldown across tabs/reloads. Only a successful response for the same revision and current date clears pending. Concurrent changes keep a newer revision pending and schedule the next attempt. Failure leaves pending intact without self-retrying indefinitely. Reconnect, visibility, focus, pageshow, new day and explicit testing provide retry opportunities. Without Web Locks, synchronization fails closed while local logging continues. No background execution guarantee is made for suspended iOS apps.
+
+The private settings key is never copied into preferences or backups. No token comes from build-time environment variables; it is entered on-device. Requests use POST, JSON, an Authorization header, no cookies/cache/referrer, no redirects, and a 15-second abort timeout. Raw server/error bodies are not displayed or logged. The Worker/CORS implementation is external to this repository.

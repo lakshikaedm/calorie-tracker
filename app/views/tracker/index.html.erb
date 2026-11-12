@@ -45,11 +45,25 @@
     </section>
     <section id="history-screen" hidden aria-labelledby="history-title"><div class="page-heading"><div><p class="eyebrow">YOUR PAST DAYS</p><h1 id="history-title">A little perspective.</h1><p class="muted">Your food and movement, day by day.</p></div></div><div id="history-list"></div><button id="more-history" class="secondary" hidden>Show earlier days</button></section>
   </main>
-  <footer class="app-footer">A little space for you. Stored only on this device.</footer>
+  <footer class="app-footer">A little space for you. Logs stored on this device.</footer>
 </div>
 <nav class="bottom-nav" aria-label="Main navigation"><a href="#today" id="nav-today" aria-current="page"><svg><use href="#i-today"/></svg>Today</a><a href="#history" id="nav-history"><svg><use href="#i-history"/></svg>History</a></nav>
 <dialog id="settings-dialog" aria-labelledby="settings-title"><div class="dialog-heading"><h2 id="settings-title">Your preferences</h2><button type="button" class="icon-button" data-close aria-label="Close settings">×</button></div>
 <form id="settings-form"><label>Daily calorie target<span class="unit-input"><input name="daily_calorie_goal" type="number" min="1" max="1000000" step="any" required inputmode="decimal"><span>kcal</span></span></label><p class="hint">Changes apply to today and future days. Past daily targets stay as recorded.</p><label class="checkbox-label"><input name="protein_enabled" type="checkbox">Set a daily protein target</label><label id="protein-goal-field" hidden>Daily protein target<span class="unit-input"><input name="optional_daily_protein_goal" type="number" min="0.1" max="1000000" step="any" inputmode="decimal"><span>g</span></span></label><label>Appearance<select name="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><button class="primary">Save preferences</button><p id="settings-error" class="error" role="alert" hidden></p></form>
+<section class="data-management" aria-labelledby="widget-title"><h3 id="widget-title">Widget Sync</h3>
+<form id="widget-form">
+<label class="checkbox-label"><input name="enabled" type="checkbox">Enable Widget Sync</label>
+<label>API endpoint URL<input name="endpoint" type="url" placeholder="https://your-worker.workers.dev" autocomplete="off" spellcheck="false"></label>
+<label>Private write token<input name="token" type="password" placeholder="Enter private write token" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+<button class="secondary">Save Widget Sync</button>
+</form>
+<button id="widget-remove-token" class="setting-action danger" type="button">Remove saved token and disable sync</button>
+<button id="widget-test" class="secondary" type="button">Test Connection</button>
+<p class="hint">Save and enable Widget Sync before testing. Test Connection sends today's summary.</p>
+<p class="hint" role="status">Status: <span id="widget-status">Disabled</span><br>Last successful synchronization: <span id="widget-last-success">Never</span></p>
+<p id="widget-message" class="hint" role="status"></p>
+<p class="hint">Only today's calorie and protein summary is sent. The private token stays in this browser and is excluded from backups. It is a single-device personal credential and cannot protect against all forms of browser compromise. Sync resumes when this app is active; iOS may suspend it in the background.</p>
+</section>
 <div class="data-management"><h3>Your data</h3><button id="export-data" class="setting-action">Export JSON backup <span>↓</span></button><label class="setting-action import-label">Import JSON backup <span>↑</span><input id="import-data" type="file" accept="application/json,.json"></label><p class="hint">Import merges missing records by ID. Existing records, preferences and daily targets are kept. Restore into an empty app to recover everything.</p><button id="clear-data" class="setting-action danger">Clear all data <span>×</span></button></div><p class="hint">Your data stays in this browser. Clearing browser or app storage can remove it. Export a backup regularly.</p><p class="hint">Exercise calorie estimates are approximate and do not necessarily represent additional calories that should all be eaten.</p><p id="offline-status" class="hint">Preparing offline access…</p><button id="apply-update" class="secondary" hidden>Update app</button></dialog>
 <dialog id="edit-dialog" aria-labelledby="edit-title"><div class="dialog-heading"><h2 id="edit-title">Edit entry</h2><button type="button" class="icon-button" data-close aria-label="Close editor">×</button></div><form id="edit-form"></form><button id="delete-entry" class="setting-action danger">Delete entry</button></dialog>
 <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Clear all your data?</h2><p>This removes entries, drafts, settings and daily targets from this device. Export a backup first if you want to keep them.</p><div class="confirm-actions"><button id="cancel-clear" class="secondary">Keep data</button><button id="confirm-clear" class="primary destructive">Clear everything</button></div></dialog>
